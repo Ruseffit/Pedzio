@@ -1,3 +1,31 @@
+<?php
+// cliente.php - Marketplace de Alimentos para Clientes
+session_start();
+require_once 'conexion.php';
+
+// Validar que el cliente esté logueado
+if (!isset($_SESSION['id_cliente'])) {
+    header("Location: login_cliente.php");
+    exit();
+}
+
+$id_cliente = $_SESSION['id_cliente'];
+
+// Obtener productosufacturados
+try {
+    $stmt = $pdo->query("SELECT id_producto, nombre, descripcion, precio, imagen, id_usuario FROM Producto WHERE activo = 1");
+    $products = $stmt->fetchAll();
+} catch (PDOException $e) {
+    $products = [];
+    error_log("Error cargando productos: " . $e->getMessage());
+}
+
+// Obtener contador del carrito (opcional, si quieres mostrar productos en carrito)
+$cart_count = 0;
+if (isset($_SESSION['cart'])) {
+    $cart_count = count($_SESSION['cart']);
+}
+?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -38,6 +66,7 @@
   .cart-btn {
     position: relative; cursor: pointer; background: none; border: none;
     font-size: 26px; color: var(--navy); transition: transform 0.2s; margin-left: auto;
+    text-decoration: none;
   }
   .cart-btn:hover { transform: scale(1.1); }
   .cart-badge {
@@ -47,6 +76,11 @@
     width: 18px; height: 18px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
   }
+
+  /* ALERTAS */
+  .alert { padding: 14px 18px; border-radius: 8px; margin-bottom: 20px; font-weight: 500; }
+  .alert-success { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+  .alert-error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 
   /* BANNER */
   .container { max-width: 1200px; margin: 0 auto; padding: 32px 5%; }
@@ -118,14 +152,33 @@
     <span class="search-icon">🔍</span>
     <input type="text" placeholder="¿Qué se te antoja comer hoy?...">
   </div>
-  <button class="cart-btn" onclick="alert('Ver carrito')">
+  <a href="carrito_ver.php" class="cart-btn">
     🛒
-    <span class="cart-badge" id="cartCount">0</span>
-  </button>
+    <span class="cart-badge" id="cartCount"><?= $cart_count ?></span>
+  </a>
 </nav>
 
 <!-- CONTENIDO -->
 <div class="container">
+
+  <!-- ALERTAS -->
+  <?php if (isset($_GET['status']) && $_GET['status'] === 'success'): ?>
+    <div class="alert alert-success">
+      ✅ ¡Pedido realizado exitosamente! Tu美食 está en preparación.
+    </div>
+  <?php endif; ?>
+
+  <?php if (isset($_GET['error'])): ?>
+    <div class="alert alert-error">
+      ❌ Error: 
+      <?php 
+      if ($_GET['error'] === 'producto_invalido') echo 'Producto inválido';
+      elseif ($_GET['error'] === 'precio_invalido') echo 'Precio inválido';
+      elseif ($_GET['error'] === 'orden_fail') echo 'No se pudo procesar tu orden. Inténtalo de nuevo';
+      else echo $_GET['error'];
+      ?>
+    </div>
+  <?php endif; ?>
 
   <!-- BANNER -->
   <div class="banner">
@@ -141,54 +194,44 @@
     <h2>Los platos más solicitados</h2>
   </div>
 
-  <div class="products-grid" id="productsGrid">
-
-  <?php
-    // 1. Llamamos a la conexión oficial de InfinityFree
-    require_once 'conexion.php';
-
-    try {
-        // 2. Traemos las columnas exactas de tu tabla 'Producto' sin renombrarlas con alias confusos
-        $stmt = $pdo->query("SELECT id_producto, nombre, descripcion, precio, imagen FROM Producto WHERE activo = 1");
-        $products = $stmt->fetchAll();
-
-        // 3. Iteramos de forma segura sobre los platos de la base de datos
-        foreach ($products as $p):
-    ?>
-    <div class="product-card">
-      <div class="product-img"><?= htmlspecialchars($p['imagen']) ?></div>
-      <div class="product-body">
-        <div class="product-name"><?= htmlspecialchars($p['nombre']) ?></div>
-        <div class="product-desc"><?= htmlspecialchars($p['descripcion']) ?></div>
-        
-        <div class="product-footer">
-          <div class="product-price"><span>S/. </span><?= number_format($p['precio'], 2) ?></div>
-          
-          <form method="POST" action="carrito.php" style="margin:0">
-            <input type="hidden" name="id_producto" value="<?= $p['id_producto'] ?>">
-            <input type="hidden" name="precio" value="<?= $p['precio'] ?>">
+  <div class="products-grid">
+    <?php if (empty($products)): ?>
+      <p style="color: var(--gray-text); text-align: center; grid-column: 1/-1; padding: 40px;">
+        No hay productos disponibles en este momento.
+      </p>
+    <?php else: ?>
+      <?php foreach ($products as $p): ?>
+        <div class="product-card">
+          <div class="product-img">
+            <?php if (!empty($p['imagen']) && filter_var($p['imagen'], FILTER_VALIDATE_URL)): ?>
+              <img src="<?= htmlspecialchars($p['imagen']) ?>" alt="<?= htmlspecialchars($p['nombre']) ?>">
+            <?php else: ?>
+              🍽️
+            <?php endif; ?>
+          </div>
+          <div class="product-body">
+            <div class="product-name"><?= htmlspecialchars($p['nombre']) ?></div>
+            <div class="product-desc"><?= htmlspecialchars($p['descripcion'] ?? 'Sin descripción') ?></div>
             
-            <button type="submit" class="btn-add">+</button>
-          </form>
+            <div class="product-footer">
+              <div class="product-price">
+                <span>S/. </span><?= number_format($p['precio'], 2) ?>
+              </div>
+              
+              <form method="POST" action="carrito.php" style="margin:0">
+                <input type="hidden" name="id_producto" value="<?= $p['id_producto'] ?>">
+                <input type="hidden" name="precio" value="<?= $p['precio'] ?>">
+                <input type="hidden" name="id_emprendedor" value="<?= $p['id_usuario'] ?>">
+                
+                <button type="submit" class="btn-add" title="Añadir al carrito">+</button>
+              </form>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-    <?php 
-        endforeach; 
-    } catch (PDOException $e) {
-        echo "<p style='color:red; text-align:center; grid-column: 1/-1;'>Error al cargar los platos desde el servidor.</p>";
-    }
-    ?>
-
+      <?php endforeach; ?>
+    <?php endif; ?>
   </div>
 </div>
 
-<script>
-  let count = 0;
-  function addToCart() {
-    count++;
-    document.getElementById('cartCount').textContent = count;
-  }
-</script>
 </body>
 </html>
