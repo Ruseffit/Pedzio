@@ -1,3 +1,48 @@
+<?php
+session_start();
+require_once 'conexion.php';
+
+// Usar el ID del usuario de la sesión real (o fallback a 1 para pruebas)
+$id_usuario = $_SESSION['id_usuario'] ?? 1;
+
+try {
+    // ==================== CÁLCULO DE KPIs EN TIEMPO REAL ====================
+    
+    // Pedidos de hoy
+    $stmt_p = $pdo->prepare("SELECT COUNT(*) FROM Pedido WHERE id_usuario = :uid AND DATE(fecha_registro) = CURDATE() AND activo = 1");
+    $stmt_p->execute([':uid' => $id_usuario]);
+    $pedidos_hoy = $stmt_p->fetchColumn();
+
+    // Ingresos de hoy
+    $stmt_i = $pdo->prepare("SELECT COALESCE(SUM(i.monto), 0) FROM Ingreso i JOIN Pedido p ON i.id_pedido = p.id_pedido WHERE p.id_usuario = :uid AND DATE(p.fecha_registro) = CURDATE() AND i.activo = 1");
+    $stmt_i->execute([':uid' => $id_usuario]);
+    $ingresos_hoy = $stmt_i->fetchColumn();
+
+    // Gastos de hoy
+    $stmt_g = $pdo->prepare("SELECT COALESCE(SUM(monto), 0) FROM Gasto WHERE id_usuario = :uid AND DATE(fecha_gasto) = CURDATE() AND activo = 1");
+    $stmt_g->execute([':uid' => $id_usuario]);
+    $gastos_hoy = $stmt_g->fetchColumn();
+
+    // Balance neto
+    $balance_neto = $ingresos_hoy - $gastos_hoy;
+
+    // ==================== PEDIDOS RECIENTES ====================
+    
+    $stmt_recientes = $pdo->prepare("
+        SELECT p.id_pedido, p.fecha_registro, p.estado, p.total, c.nombre AS cliente, c.telefono AS telefono_cliente 
+        FROM Pedido p 
+        JOIN Cliente c ON p.id_cliente = c.id_cliente 
+        WHERE p.id_usuario = :uid AND p.activo = 1 
+        ORDER BY p.fecha_registro DESC 
+        LIMIT 10
+    ");
+    $stmt_recientes->execute([':uid' => $id_usuario]);
+    $pedidos_recientes = $stmt_recientes->fetchAll();
+
+} catch (PDOException $e) {
+    die("Error cargando el panel del emprendedor: " . $e->getMessage());
+}
+?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -150,84 +195,32 @@
   <main class="workspace">
 
     <!-- KPIs -->
-    <div class="orders-section">
-      <h3>Pedidos Recientes</h3>
-      
-      <?php
-      // 1. Ejecutamos la consulta directa que limpia la restricción de las vistas
-      $sql_pedidos = "SELECT 
-                          p.id_pedido, 
-                          c.nombre AS cliente, 
-                          p.total, 
-                          p.estado 
-                      FROM Pedido p
-                      INNER JOIN Cliente c ON p.id_cliente = c.id_cliente
-                      WHERE p.activo = 1 
-                      ORDER BY p.fecha_registro DESC 
-                      LIMIT 6";
-
-      $stmt = $pdo->query($sql_pedidos);
-      $pedidos_db = $stmt->fetchAll();
-      ?>
-
-      <table>
-        <thead>
-          <tr>
-            <th>ID Pedido</th>
-            <th>Cliente</th>
-            <th>Total</th>
-            <th>Estado</th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php 
-          // 2. Recorremos los pedidos traídos de la base de datos para armar la tabla en vivo
-          foreach ($pedidos_db as $p_db): 
-              // Configuración dinámica de estilos según el estado del pedido
-              $estado_badge = 'pending';
-              if ($p_db['estado'] === 'Entregado')  $estado_badge = 'done';
-              if ($p_db['estado'] === 'Cancelado')  $estado_badge = 'cancel';
-
-              $badge_class = $estado_badge === 'done' ? 'badge-done' : ($estado_badge === 'pending' ? 'badge-pending' : 'badge-cancel');
-              $label_texto = $p_db['estado'];
-          ?>
-          <tr>
-            <td><strong>#<?= str_pad($p_db['id_pedido'], 4, '0', STR_PAD_LEFT) ?></strong></td>
-            <td><?= htmlspecialchars($p_db['cliente']) ?></td>
-            <td>S/. <?= number_format($p_db['total'], 2) ?></td>
-            <td><span class="badge <?= $badge_class ?>"><?= $label_texto ?></span></td>
-          </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
-    </div>
-
     <div class="kpi-row">
       <div class="kpi-card">
         <div class="kpi-icon">📦</div>
         <div class="kpi-label">Pedidos de Hoy</div>
-        <div class="kpi-value"><?= $pedidos_dia ?></div>
+        <div class="kpi-value"><?= $pedidos_hoy ?></div>
         <div class="kpi-sub">Actualizado en tiempo real</div>
       </div>
       
       <div class="kpi-card">
         <div class="kpi-icon">💵</div>
         <div class="kpi-label">Ingresos Totales</div>
-        <div class="kpi-value">S/. <?= number_format($ingresos, 2) ?></div>
+        <div class="kpi-value">S/. <?= number_format($ingresos_hoy, 2) ?></div>
         <div class="kpi-sub">Flujo de caja acumulado</div>
       </div>
       
       <div class="kpi-card">
         <div class="kpi-icon">🧾</div>
         <div class="kpi-label">Gastos Registrados</div>
-        <div class="kpi-value">S/. <?= number_format($gastos, 2) ?></div>
-        <div class="kpi-sub" style="font-weight: 600; color: <?= $margen_neto >= 0 ? '#10B981' : '#EF4444' ?>;">
-          Margen Neto: S/. <?= number_format($margen_neto, 2) ?>
+        <div class="kpi-value">S/. <?= number_format($gastos_hoy, 2) ?></div>
+        <div class="kpi-sub" style="font-weight: 600; color: <?= $balance_neto >= 0 ? '#10B981' : '#EF4444' ?>;">
+          Margen Neto: S/. <?= number_format($balance_neto, 2) ?>
         </div>
       </div>
     </div>
 
-    <!-- BOTTOM -->
+    <!-- BOTTOM GRID -->
     <div class="bottom-grid">
 
       <!-- FORM -->
@@ -265,115 +258,43 @@
             <tr>
               <th>#</th>
               <th>Cliente</th>
+              <th>Teléfono</th>
               <th>Total</th>
               <th>Estado</th>
+              <th>Fecha</th>
             </tr>
           </thead>
           <tbody>
-            <?php
-session_start();
-require_once 'conexion.php';
-
-// Simulamos la sesión del emprendedor logueado (ID = 1: Sabores del Norte)
-$id_usuario = 1; 
-
-try {
-    // 1. CÁLCULO DE KPIs EN TIEMPO REAL (Pedidos, Ingresos y Gastos de HOY)
-    // Pedidos de hoy
-    $stmt_p = $pdo->prepare("SELECT COUNT(*) FROM Pedido WHERE id_usuario = :uid AND DATE(fecha_registro) = CURDATE() AND activo = 1");
-    $stmt_p->execute([':uid' => $id_usuario]);
-    $pedidos_hoy = $stmt_p->fetchColumn();
-
-    // Ingresos de hoy
-    $stmt_i = $pdo->prepare("SELECT COALESCE(SUM(i.monto), 0) FROM Ingreso i JOIN Pedido p ON i.id_pedido = p.id_pedido WHERE p.id_usuario = :uid AND DATE(p.fecha_registro) = CURDATE() AND i.activo = 1");
-    $stmt_i->execute([':uid' => $id_usuario]);
-    $ingresos_hoy = $stmt_i->fetchColumn();
-
-    // Gastos de hoy
-    $stmt_g = $pdo->prepare("SELECT COALESCE(SUM(monto), 0) FROM Gasto WHERE id_usuario = :uid AND DATE(fecha_gasto) = CURDATE() AND activo = 1");
-    $stmt_g->execute([':uid' => $id_usuario]);
-    $gastos_hoy = $stmt_g->fetchColumn();
-
-    $balance_neto = $ingresos_hoy - $gastos_hoy;
-
-    // 2. OBTENER LOS PEDIDOS RECIENTES
-    $stmt_recientes = $pdo->prepare("
-        SELECT p.id_pedido, p.fecha_registro, p.estado, p.total, c.nombre AS cliente, c.telefono AS telefono_cliente 
-        FROM Pedido p 
-        JOIN Cliente c ON p.id_cliente = c.id_cliente 
-        WHERE p.id_usuario = :uid AND p.activo = 1 
-        ORDER BY p.fecha_registro DESC LIMIT 10
-    ");
-    $stmt_recientes->execute([':uid' => $id_usuario]);
-    $pedidos_recientes = $stmt_recientes->fetchAll();
-
-} catch (PDOException $e) {
-    die("Error cargando el panel del emprendedor: " . $e->getMessage());
-}
-?>
-
-<div class="kpi-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 30px;">
-    <div class="kpi-card" style="background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #ff6b6b;">
-        <h3 style="margin:0; color:#777; font-size:14px; text-transform: uppercase;">Pedidos de Hoy</h3>
-        <p style="margin:10px 0 0 0; font-size:28px; font-weight:bold; color:#333;"><?= $pedidos_hoy ?></p>
-    </div>
-    <div class="kpi-card" style="background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #2ecc71;">
-        <h3 style="margin:0; color:#777; font-size:14px; text-transform: uppercase;">Ingresos Diarios</h3>
-        <p style="margin:10px 0 0 0; font-size:28px; font-weight:bold; color:#2ecc71;">S/. <?= number_format($ingresos_hoy, 2) ?></p>
-    </div>
-    <div class="kpi-card" style="background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #e74c3c;">
-        <h3 style="margin:0; color:#777; font-size:14px; text-transform: uppercase;">Gastos Diarios</h3>
-        <p style="margin:10px 0 0 0; font-size:28px; font-weight:bold; color:#e74c3c;">S/. <?= number_format($gastos_hoy, 2) ?></p>
-    </div>
-    <div class="kpi-card" style="background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #3498db;">
-        <h3 style="margin:0; color:#777; font-size:14px; text-transform: uppercase;">Balance Caja</h3>
-        <p style="margin:10px 0 0 0; font-size:28px; font-weight:bold; color:<?= $balance_neto >= 0 ? '#3498db' : '#e74c3c' ?>;">S/. <?= number_format($balance_neto, 2) ?></p>
-    </div>
-</div>
-
-<div class="table-container" style="background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-    <h2 style="margin-top: 0; margin-bottom: 20px; color: #333; font-size: 18px;">Pedidos Recientes</h2>
-    
-    <table style="width: 100%; border-collapse: collapse; text-align: left;">
-        <thead>
-            <tr style="background: #f8f9fa; border-bottom: 2px solid #eee;">
-                <th style="padding: 12px; color: #555;">ID Pedido</th>
-                <th style="padding: 12px; color: #555;">Cliente</th>
-                <th style="padding: 12px; color: #555;">Teléfono</th>
-                <th style="padding: 12px; color: #555;">Total</th>
-                <th style="padding: 12px; color: #555;">Estado</th>
-                <th style="padding: 12px; color: #555;">Fecha</th>
-            </tr>
-        </thead>
-        <tbody>
             <?php if (empty($pedidos_recientes)): ?>
-                <tr>
-                    <td colspan="6" style="padding: 20px; text-align: center; color: #999;">No hay pedidos registrados para hoy.</td>
-                </tr>
+              <tr>
+                <td colspan="6" style="padding: 20px; text-align: center; color: var(--gray-text);">No hay pedidos registrados hoy.</td>
+              </tr>
             <?php else: ?>
-                <?php foreach ($pedidos_recientes as $pedido): 
-                    // Asignación de clases o colores según el estado mapeado en tu script SQL
-                    $badge_color = '#f1c40f'; // Pendiente (Amarillo)
-                    if ($pedido['estado'] === 'Entregado') $badge_color = '#2ecc71'; // Entregado (Verde)
-                    if ($pedido['estado'] === 'Cancelado') $badge_color = '#e74c3c'; // Cancelado (Rojo)
-                    if ($pedido['estado'] === 'En Camino') $badge_color = '#3498db'; // En Camino (Azul)
-                ?>
-                <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 12px; font-weight: bold; color: #555;">#<?= $pedido['id_pedido'] ?></td>
-                    <td style="padding: 12px; color: #333;"><?= htmlspecialchars($pedido['cliente']) ?></td>
-                    <td style="padding: 12px; color: #666;"><?= htmlspecialchars($pedido['telefono_cliente']) ?></td>
-                    <td style="padding: 12px; font-weight: bold; color: #333;">S/. <?= number_format($pedido['total'], 2) ?></td>
-                    <td style="padding: 12px;">
-                        <span style="background: <?= $badge_color ?>; color: #fff; padding: 5px 10px; border-radius: 15px; font-size: 12px; font-weight: bold;">
-                            <?= $pedido['estado'] ?>
-                        </span>
-                    </td>
-                    <td style="padding: 12px; color: #888; font-size: 13px;"><?= $pedido['fecha_registro'] ?></td>
-                </tr>
-                <?php endforeach; ?>
+              <?php foreach ($pedidos_recientes as $pedido): 
+                // Asignación de badges según estado
+                $badge_class = 'badge-pending';
+                $label_texto = $pedido['estado'];
+                
+                if ($pedido['estado'] === 'Entregado')  $badge_class = 'badge-done';
+                if ($pedido['estado'] === 'Cancelado')  $badge_class = 'badge-cancel';
+              ?>
+              <tr>
+                <td><strong>#<?= str_pad($pedido['id_pedido'], 4, '0', STR_PAD_LEFT) ?></strong></td>
+                <td><?= htmlspecialchars($pedido['cliente']) ?></td>
+                <td><?= htmlspecialchars($pedido['telefono_cliente']) ?></td>
+                <td><strong>S/. <?= number_format($pedido['total'], 2) ?></strong></td>
+                <td><span class="badge <?= $badge_class ?>"><?= $label_texto ?></span></td>
+                <td style="color: var(--gray-text); font-size: 0.75rem;"><?= date('d/m/Y H:i', strtotime($pedido['fecha_registro'])) ?></td>
+              </tr>
+              <?php endforeach; ?>
             <?php endif; ?>
-        </tbody>
-    </table>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+  </main>
 </div>
 
 </body>
