@@ -28,7 +28,7 @@ El sistema está completamente automatizado y se divide en tres entornos dinámi
 ## 📂 Arquitectura de Archivos Críticos
 
 ```text
-├── index.html              # Landing page pública de bienvenida del sistema
+├── index.php              # Landing page pública de bienvenida del sistema
 ├── conexion.php            # Mapeo y puente de conexión PDO oficial hacia la nube (MySQL Host)
 ├── cliente.php             # Vista del Marketplace dinámico mapeado con la tabla Producto
 ├── carrito.php             # Controlador transaccional que procesa la lógica de compra y caja chica
