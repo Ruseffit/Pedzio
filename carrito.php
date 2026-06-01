@@ -3,29 +3,44 @@
 session_start();
 require_once 'conexion.php';
 
-// Simulamos una sesión de cliente iniciada (ID = 1, Carlos Mendoza en tu script SQL) si no existe
+// Validar que el cliente esté logueado
 if (!isset($_SESSION['id_cliente'])) {
-    $_SESSION['id_cliente'] = 1; 
+    header("Location: login_cliente.php");
+    exit();
 }
 
-// Verificar que recibamos un producto válido por POST
+$id_cliente = $_SESSION['id_cliente'];
+
+// Verificar que recibimos un producto válido por POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_producto'])) {
+    
     $id_producto = intval($_POST['id_producto']);
     $precio_plato = floatval($_POST['precio'] ?? 0);
-    $id_emprendedor = 1; // ID de tu MYPE demo 'Sabores del Norte'
+    $id_emprendedor = intval($_POST['id_emprendedor'] ?? 1);
+
+    // Validaciones
+    if ($id_producto <= 0) {
+        header("Location: cliente.php?error=producto_invalido");
+        exit();
+    }
+
+    if ($precio_plato <= 0) {
+        header("Location: cliente.php?error=precio_invalido");
+        exit();
+    }
 
     try {
         // Iniciamos una transacción limpia para evitar bloqueos del servidor
         $pdo->beginTransaction();
 
         // 1. Insertamos la cabecera del Pedido con estado inicial 'Pendiente'
-        $sql_pedido = "INSERT INTO Pedido (estado, total, id_cliente, id_usuario)
-                       VALUES ('Pendiente', :total, :id_cliente, :id_usuario)";
+        $sql_pedido = "INSERT INTO Pedido (estado, total, id_cliente, id_usuario, activo)
+                       VALUES ('Pendiente', :total, :id_cliente, :id_usuario, 1)";
         
         $stmt_ped = $pdo->prepare($sql_pedido);
         $stmt_ped->execute([
             ':total'      => $precio_plato, 
-            ':id_cliente' => $_SESSION['id_cliente'], 
+            ':id_cliente' => $id_cliente, 
             ':id_usuario' => $id_emprendedor
         ]);
         
@@ -44,14 +59,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_producto'])) {
         ]);
 
         // 3. Insertamos el flujo de caja en la tabla de Ingresos vinculada al pedido
-        $sql_ingreso = "INSERT INTO Ingreso (monto, descripcion, id_pedido)
-                        VALUES (:monto, :desc, :id_ped)";
+        // CORREGIDO: Agregado id_usuario
+        $sql_ingreso = "INSERT INTO Ingreso (monto, descripcion, id_pedido, id_usuario, activo)
+                        VALUES (:monto, :desc, :id_ped, :uid, 1)";
         
         $stmt_ing = $pdo->prepare($sql_ingreso);
         $stmt_ing->execute([
             ':monto'  => $precio_plato, 
             ':desc'   => 'Venta automatizada pedido #' . $id_pedido, 
-            ':id_ped' => $id_pedido
+            ':id_ped' => $id_pedido,
+            ':uid'    => $id_emprendedor  // ✅ AGREGADO: id_usuario
         ]);
 
         // Confirmamos todos los datos en las tablas
@@ -61,9 +78,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_producto'])) {
         header("Location: cliente.php?status=success");
         exit();
 
-    } catch (Exception $e) {
+    } catch (PDOException $e) {
         $pdo->rollBack();
-        die("Error procesando la orden en el modelo relacional: " . $e->getMessage());
+        error_log("Error carrito.php: " . $e->getMessage());
+        header("Location: cliente.php?error=orden_fail");
+        exit();
     }
 } else {
     // Si entran sin presionar un botón, se les regresa
