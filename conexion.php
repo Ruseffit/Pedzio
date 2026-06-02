@@ -1,8 +1,8 @@
 <?php
 $host = 'sql306.infinityfree.com';
-$dbname = 'if042067399_pedzio_db';
-$user = 'if_042067399';
-$password = '74fyMkbcdFbII';
+$dbname = 'if042067399pedziodb';
+$user = 'if042067399';
+$password = 'TU_PASSWORD_REAL';
 $port = '3306';
 
 try {
