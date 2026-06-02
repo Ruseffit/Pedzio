@@ -1,23 +1,10 @@
 <?php
 session_start();
-require_once 'conexion-4.php';
+require_once 'conexion.php';
 
-if (!isset($_SESSION['cart'])) {
-    $_SESSION['cart'] = [];
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_producto'])) {
-    $id_producto = (int) $_POST['id_producto'];
-
-    if ($id_producto > 0) {
-        if (!isset($_SESSION['cart'][$id_producto])) {
-            $_SESSION['cart'][$id_producto] = ['cantidad' => 1];
-        } else {
-            $_SESSION['cart'][$id_producto]['cantidad']++;
-        }
-        header("Location: cliente.php?status=agregado");
-        exit();
-    }
+if (!isset($_SESSION['idcliente'])) {
+    header("Location: logincliente.php");
+    exit();
 }
 
 try {
@@ -28,10 +15,7 @@ try {
     error_log("Error cargando productos: " . $e->getMessage());
 }
 
-$cart_count = 0;
-foreach ($_SESSION['cart'] as $item) {
-    $cart_count += (int)($item['cantidad'] ?? 0);
-}
+$cart_count = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
 ?>
 
 <!DOCTYPE html>
