@@ -1,48 +1,39 @@
 <?php
-// 1. CONEXIÓN E INYECCIÓN ANALÍTICA (Al inicio del archivo)
 require_once 'conexion.php';
 
 try {
-    // Consulta para los KPIs Superadmin (Sustituye la vista v_kpis_global)
-    $sql_global_kpis = "SELECT 
-                            (SELECT COUNT(*) FROM Usuario WHERE rol = 'Emprendedor' AND activo = 1) AS total_mypes,
-                            (SELECT COUNT(*) FROM Pedido WHERE activo = 1) AS total_ordenes,
-                            ROUND(
-                              (SELECT COUNT(*) FROM Pedido WHERE estado = 'Entregado' AND activo = 1) * 100.0
-                              / NULLIF((SELECT COUNT(*) FROM Pedido WHERE activo = 1), 0)
-                            , 1) AS efectividad_pct";
-    
-    $stmt_kpis = $pdo->query($sql_global_kpis);
-    $global_kpis = $stmt_kpis->fetch();
+    $stmt = $pdo->query("
+        SELECT 
+            COUNT(*) AS totalmypes,
+            (SELECT COUNT(*) FROM Pedido WHERE activo = 1) AS totalordenes,
+            ROUND((SELECT COUNT(*) FROM Pedido WHERE estado = 'Entregado' AND activo = 1) * 100.0 / NULLIF((SELECT COUNT(*) FROM Pedido WHERE activo = 1), 0), 1) AS efectividadpct
+        FROM Usuario
+        WHERE rol = 'Emprendedor' AND activo = 1
+    ");
+    $globalkpis = $stmt->fetch();
 
-    $total_mypes     = $global_kpis['total_mypes'] ?? 0;
-    $total_ordenes   = $global_kpis['total_ordenes'] ?? 0;
-    $efectividad_pct = $global_kpis['efectividad_pct'] ?? 0.0;
-
-    // Consulta para la Tabla de Auditoría General (Sustituye la vista v_auditoria_superadmin)
-    $sql_auditoria = "SELECT
-                        u.id_usuario,
-                        u.nombre AS negocio,
-                        u.correo,
-                        u.activo,
-                        COUNT(DISTINCT pr.id_producto) AS total_productos,
-                        COUNT(DISTINCT pe.id_pedido) AS total_pedidos,
-                        COALESCE(SUM(i.monto), 0) AS facturacion_total
-                      FROM Usuario u
-                      LEFT JOIN Producto pr ON pr.id_usuario = u.id_usuario AND pr.activo = 1
-                      LEFT JOIN Pedido pe ON pe.id_usuario = u.id_usuario AND pe.activo = 1
-                      LEFT JOIN Ingreso i ON i.id_pedido = pe.id_pedido AND i.activo = 1
-                      WHERE u.rol = 'Emprendedor'
-                      GROUP BY u.id_usuario, u.nombre, u.correo, u.activo
-                      ORDER BY facturacion_total DESC";
-
-    $stmt_audit = $pdo->query($sql_auditoria);
-    $auditoria_db = $stmt_audit->fetchAll();
-
+    $stmt2 = $pdo->query("
+        SELECT 
+            u.id_usuario,
+            u.nombre AS negocio,
+            u.correo,
+            u.activo,
+            COUNT(DISTINCT pr.id_producto) AS total_productos,
+            COUNT(DISTINCT pe.id_pedido) AS total_pedidos,
+            COALESCE(SUM(i.monto), 0) AS facturacion_total
+        FROM Usuario u
+        LEFT JOIN Producto pr ON pr.id_usuario = u.id_usuario AND pr.activo = 1
+        LEFT JOIN Pedido pe ON pe.id_usuario = u.id_usuario AND pe.activo = 1
+        LEFT JOIN Ingreso i ON i.id_pedido = pe.id_pedido AND i.activo = 1
+        WHERE u.rol = 'Emprendedor'
+        GROUP BY u.id_usuario, u.nombre, u.correo, u.activo
+        ORDER BY facturacion_total DESC
+    ");
+    $auditoriadb = $stmt2->fetchAll();
 } catch (PDOException $e) {
-    // Valores de respaldo en caso de un fallo de lectura
-    $total_mypes = 0; $total_ordenes = 0; $efectividad_pct = 0.0;
-    $auditoria_db = [];
+    $globalkpis = ['totalmypes' => 0, 'totalordenes' => 0, 'efectividadpct' => 0];
+    $auditoriadb = [];
+    error_log("Error superadmin.php: " . $e->getMessage());
 }
 ?>
 <!DOCTYPE html>
