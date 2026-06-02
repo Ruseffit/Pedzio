@@ -2,45 +2,32 @@
 session_start();
 require_once 'conexion.php';
 
-// Usar el ID del usuario de la sesión real (o fallback a 1 para pruebas)
-$id_usuario = $_SESSION['id_usuario'] ?? 1;
+if (!isset($_SESSION['idusuario'])) {
+    header("Location: login.php");
+    exit();
+}
+
+$id_usuario = (int) $_SESSION['idusuario'];
 
 try {
-    // ==================== CÁLCULO DE KPIs EN TIEMPO REAL ====================
-    
-    // Pedidos de hoy
-    $stmt_p = $pdo->prepare("SELECT COUNT(*) FROM Pedido WHERE id_usuario = :uid AND DATE(fecha_registro) = CURDATE() AND activo = 1");
-    $stmt_p->execute([':uid' => $id_usuario]);
-    $pedidos_hoy = $stmt_p->fetchColumn();
+    $stmt_kpi = $pdo->prepare("SELECT COUNT(*) AS pedidos_hoy, COALESCE(SUM(i.monto),0) AS ingresos_totales
+                               FROM Pedido p
+                               LEFT JOIN Ingreso i ON i.id_pedido = p.id_pedido AND i.activo = 1
+                               WHERE p.id_usuario = :uid AND p.activo = 1 AND DATE(p.fecha_registro) = CURDATE()");
+    $stmt_kpi->execute([':uid' => $id_usuario]);
+    $kpi = $stmt_kpi->fetch();
 
-    // Ingresos de hoy
-    $stmt_i = $pdo->prepare("SELECT COALESCE(SUM(i.monto), 0) FROM Ingreso i JOIN Pedido p ON i.id_pedido = p.id_pedido WHERE p.id_usuario = :uid AND DATE(p.fecha_registro) = CURDATE() AND i.activo = 1");
-    $stmt_i->execute([':uid' => $id_usuario]);
-    $ingresos_hoy = $stmt_i->fetchColumn();
-
-    // Gastos de hoy
-    $stmt_g = $pdo->prepare("SELECT COALESCE(SUM(monto), 0) FROM Gasto WHERE id_usuario = :uid AND DATE(fecha_gasto) = CURDATE() AND activo = 1");
-    $stmt_g->execute([':uid' => $id_usuario]);
-    $gastos_hoy = $stmt_g->fetchColumn();
-
-    // Balance neto
-    $balance_neto = $ingresos_hoy - $gastos_hoy;
-
-    // ==================== PEDIDOS RECIENTES ====================
-    
-    $stmt_recientes = $pdo->prepare("
-        SELECT p.id_pedido, p.fecha_registro, p.estado, p.total, c.nombre AS cliente, c.telefono AS telefono_cliente 
-        FROM Pedido p 
-        JOIN Cliente c ON p.id_cliente = c.id_cliente 
-        WHERE p.id_usuario = :uid AND p.activo = 1 
-        ORDER BY p.fecha_registro DESC 
-        LIMIT 10
-    ");
-    $stmt_recientes->execute([':uid' => $id_usuario]);
-    $pedidos_recientes = $stmt_recientes->fetchAll();
-
+    $stmt_pedidos = $pdo->prepare("SELECT p.id_pedido, c.nombre AS cliente, c.telefono AS telefono_cliente, p.total, p.estado, p.fecha_registro
+                                   FROM Pedido p
+                                   INNER JOIN Cliente c ON c.id_cliente = p.id_cliente
+                                   WHERE p.id_usuario = :uid AND p.activo = 1
+                                   ORDER BY p.fecha_registro DESC");
+    $stmt_pedidos->execute([':uid' => $id_usuario]);
+    $pedidos = $stmt_pedidos->fetchAll();
 } catch (PDOException $e) {
-    die("Error cargando el panel del emprendedor: " . $e->getMessage());
+    $kpi = ['pedidos_hoy' => 0, 'ingresos_totales' => 0];
+    $pedidos = [];
+    error_log("Error emprendedor.php: " . $e->getMessage());
 }
 ?>
 <!DOCTYPE html>
