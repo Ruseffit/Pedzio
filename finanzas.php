@@ -4,12 +4,12 @@ session_start();
 require_once 'conexion.php';
 
 // Validar que el usuario esté logueado
-if (!isset($_SESSION['id_usuario'])) {
-    header("Location: login.php");
+session_start();
+if (!isset($_SESSION['id_usuario']) || empty($_SESSION['id_usuario'])) {
+    header("Location: index.php?error=sesion_expirada");
     exit();
 }
-
-$id_usuario = $_SESSION['id_usuario'];
+$id_usuario = (int) $_SESSION['id_usuario'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['monto'])) {
     
