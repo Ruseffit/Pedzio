@@ -9,83 +9,85 @@ if (!isset($_SESSION['id_cliente'])) {
     exit();
 }
 
-$id_cliente = $_SESSION['id_cliente'];
+$id_cliente = (int) $_SESSION['id_cliente'];
 
 // Verificar que recibimos un producto válido por POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_producto'])) {
-    
-    $id_producto = intval($_POST['id_producto']);
-    $precio_plato = floatval($_POST['precio'] ?? 0);
-    $id_emprendedor = intval($_POST['id_emprendedor'] ?? 1);
 
-    // Validaciones
+    $id_producto = (int) $_POST['id_producto'];
+
     if ($id_producto <= 0) {
         header("Location: cliente.php?error=producto_invalido");
         exit();
     }
 
-    if ($precio_plato <= 0) {
-        header("Location: cliente.php?error=precio_invalido");
-        exit();
-    }
-
     try {
-        // Iniciamos una transacción limpia para evitar bloqueos del servidor
+        // Obtener precio e id_usuario desde la base de datos
+        $stmt_prod = $pdo->prepare("SELECT precio, id_usuario FROM Producto WHERE id_producto = :id AND activo = 1");
+        $stmt_prod->execute([':id' => $id_producto]);
+        $producto_data = $stmt_prod->fetch();
+
+        if (!$producto_data) {
+            header("Location: cliente.php?error=producto_invalido");
+            exit();
+        }
+
+        $precio_plato = (float) $producto_data['precio'];
+        $id_emprendedor = (int) $producto_data['id_usuario'];
+
         $pdo->beginTransaction();
 
-        // 1. Insertamos la cabecera del Pedido con estado inicial 'Pendiente'
+        // 1. Insertamos la cabecera del Pedido
         $sql_pedido = "INSERT INTO Pedido (estado, total, id_cliente, id_usuario, activo)
                        VALUES ('Pendiente', :total, :id_cliente, :id_usuario, 1)";
-        
+
         $stmt_ped = $pdo->prepare($sql_pedido);
         $stmt_ped->execute([
-            ':total'      => $precio_plato, 
-            ':id_cliente' => $id_cliente, 
+            ':total' => $precio_plato,
+            ':id_cliente' => $id_cliente,
             ':id_usuario' => $id_emprendedor
         ]);
-        
+
         $id_pedido = $pdo->lastInsertId();
 
-        // 2. Insertamos la línea de detalle con el precio histórico del momento de compra
+        // 2. Insertamos el detalle del pedido
         $sql_detalle = "INSERT INTO DetallePedido (cantidad, precio_unitario, subtotal, id_pedido, id_producto)
                         VALUES (1, :precio, :subtotal, :id_ped, :id_prod)";
-        
+
         $stmt_det = $pdo->prepare($sql_detalle);
         $stmt_det->execute([
-            ':precio'  => $precio_plato,
-            ':subtotal'=> $precio_plato,
-            ':id_ped'  => $id_pedido,
+            ':precio' => $precio_plato,
+            ':subtotal' => $precio_plato,
+            ':id_ped' => $id_pedido,
             ':id_prod' => $id_producto
         ]);
 
-        // 3. Insertamos el flujo de caja en la tabla de Ingresos vinculada al pedido
-        // CORREGIDO: Agregado id_usuario
+        // 3. Insertamos el ingreso
         $sql_ingreso = "INSERT INTO Ingreso (monto, descripcion, id_pedido, id_usuario, activo)
                         VALUES (:monto, :desc, :id_ped, :uid, 1)";
-        
+
         $stmt_ing = $pdo->prepare($sql_ingreso);
         $stmt_ing->execute([
-            ':monto'  => $precio_plato, 
-            ':desc'   => 'Venta automatizada pedido #' . $id_pedido, 
+            ':monto' => $precio_plato,
+            ':desc' => 'Venta automatizada pedido #' . $id_pedido,
             ':id_ped' => $id_pedido,
-            ':uid'    => $id_emprendedor  // ✅ AGREGADO: id_usuario
+            ':uid' => $id_emprendedor
         ]);
 
-        // Confirmamos todos los datos en las tablas
         $pdo->commit();
 
-        // Redireccionamos de vuelta al marketplace con éxito para ver los cambios reflejados
         header("Location: cliente.php?status=success");
         exit();
 
     } catch (PDOException $e) {
-        $pdo->rollBack();
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         error_log("Error carrito.php: " . $e->getMessage());
         header("Location: cliente.php?error=orden_fail");
         exit();
     }
 } else {
-    // Si entran sin presionar un botón, se les regresa
     header("Location: cliente.php");
     exit();
 }
