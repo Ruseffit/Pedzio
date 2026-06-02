@@ -9,13 +9,13 @@ $port     = 3306;
 
 try {
     $pdo = new PDO(
-        "mysql:host=$host;dbname=$dbname;port=$port;charset=utf8mb4",
-        $user,
+        "mysql:host=$host;dbname=$db_name;port=$port;charset=utf8mb4", 
+        $user, 
         $password,
         [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
+            PDO::ATTR_EMULATE_PREPARES   => false,
         ]
     );
 } catch (PDOException $e) {
