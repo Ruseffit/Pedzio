@@ -1,9 +1,7 @@
 <?php
-// carrito.php - Procesa las compras del Marketplace de forma relacional
 session_start();
 require_once 'conexion.php';
 
-// Validar que el cliente esté logueado
 if (!isset($_SESSION['id_cliente'])) {
     header("Location: login_cliente.php");
     exit();
@@ -11,9 +9,7 @@ if (!isset($_SESSION['id_cliente'])) {
 
 $id_cliente = (int) $_SESSION['id_cliente'];
 
-// Verificar que recibimos un producto válido por POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_producto'])) {
-
     $id_producto = (int) $_POST['id_producto'];
 
     if ($id_producto <= 0) {
@@ -22,7 +18,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_producto'])) {
     }
 
     try {
-        // Obtener precio e id_usuario desde la base de datos
         $stmt_prod = $pdo->prepare("SELECT precio, id_usuario FROM Producto WHERE id_producto = :id AND activo = 1");
         $stmt_prod->execute([':id' => $id_producto]);
         $producto_data = $stmt_prod->fetch();
@@ -37,10 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_producto'])) {
 
         $pdo->beginTransaction();
 
-        // 1. Insertamos la cabecera del Pedido
         $sql_pedido = "INSERT INTO Pedido (estado, total, id_cliente, id_usuario, activo)
                        VALUES ('Pendiente', :total, :id_cliente, :id_usuario, 1)";
-
         $stmt_ped = $pdo->prepare($sql_pedido);
         $stmt_ped->execute([
             ':total' => $precio_plato,
@@ -50,10 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_producto'])) {
 
         $id_pedido = $pdo->lastInsertId();
 
-        // 2. Insertamos el detalle del pedido
         $sql_detalle = "INSERT INTO DetallePedido (cantidad, precio_unitario, subtotal, id_pedido, id_producto)
                         VALUES (1, :precio, :subtotal, :id_ped, :id_prod)";
-
         $stmt_det = $pdo->prepare($sql_detalle);
         $stmt_det->execute([
             ':precio' => $precio_plato,
@@ -62,10 +53,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_producto'])) {
             ':id_prod' => $id_producto
         ]);
 
-        // 3. Insertamos el ingreso
         $sql_ingreso = "INSERT INTO Ingreso (monto, descripcion, id_pedido, id_usuario, activo)
                         VALUES (:monto, :desc, :id_ped, :uid, 1)";
-
         $stmt_ing = $pdo->prepare($sql_ingreso);
         $stmt_ing->execute([
             ':monto' => $precio_plato,
@@ -87,8 +76,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_producto'])) {
         header("Location: cliente.php?error=orden_fail");
         exit();
     }
-} else {
-    header("Location: cliente.php");
-    exit();
 }
+
+header("Location: cliente.php");
+exit();
 ?>
