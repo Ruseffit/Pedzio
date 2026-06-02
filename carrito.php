@@ -2,47 +2,81 @@
 session_start();
 require_once 'conexion.php';
 
-// Inicializar carrito
-if (!isset($_SESSION['cart'])) {
-    $_SESSION['cart'] = [];
+if (!isset($_SESSION['idcliente'])) {
+    header("Location: logincliente.php");
+    exit();
 }
 
-// Agregar producto al carrito
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_producto'])) {
-    $id_producto = (int) $_POST['id_producto'];
+$id_cliente = (int) $_SESSION['idcliente'];
 
-    if ($id_producto > 0) {
-        if (!isset($_SESSION['cart'][$id_producto])) {
-            $_SESSION['cart'][$id_producto] = [
-                'cantidad' => 1
-            ];
-        } else {
-            $_SESSION['cart'][$id_producto]['cantidad']++;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['idproducto'])) {
+    $id_producto = (int) $_POST['idproducto'];
+    $precio_plato = floatval($_POST['precio'] ?? 0);
+    $id_emprendedor = (int) ($_POST['idemprendedor'] ?? 0);
+
+    if ($id_producto <= 0) {
+        header("Location: cliente.php?error=productoinvalido");
+        exit();
+    }
+
+    if ($precio_plato <= 0) {
+        header("Location: cliente.php?error=precioinvalido");
+        exit();
+    }
+
+    if ($id_emprendedor <= 0) {
+        header("Location: cliente.php?error=emprendedorinvalido");
+        exit();
+    }
+
+    try {
+        $pdo->beginTransaction();
+
+        $sql_pedido = "INSERT INTO Pedido (estado, total, id_cliente, id_usuario, activo)
+                       VALUES ('Pendiente', :total, :id_cliente, :id_usuario, 1)";
+        $stmt_ped = $pdo->prepare($sql_pedido);
+        $stmt_ped->execute([
+            ':total' => $precio_plato,
+            ':id_cliente' => $id_cliente,
+            ':id_usuario' => $id_emprendedor
+        ]);
+
+        $id_pedido = $pdo->lastInsertId();
+
+        $sql_detalle = "INSERT INTO DetallePedido (cantidad, precio_unitario, subtotal, id_pedido, id_producto)
+                        VALUES (1, :precio, :subtotal, :id_ped, :id_prod)";
+        $stmt_det = $pdo->prepare($sql_detalle);
+        $stmt_det->execute([
+            ':precio' => $precio_plato,
+            ':subtotal' => $precio_plato,
+            ':id_ped' => $id_pedido,
+            ':id_prod' => $id_producto
+        ]);
+
+        $sql_ingreso = "INSERT INTO Ingreso (monto, descripcion, id_pedido, id_usuario, activo)
+                        VALUES (:monto, :desc, :id_ped, :uid, 1)";
+        $stmt_ing = $pdo->prepare($sql_ingreso);
+        $stmt_ing->execute([
+            ':monto' => $precio_plato,
+            ':desc' => 'Venta automatizada pedido #' . $id_pedido,
+            ':id_ped' => $id_pedido,
+            ':uid' => $id_emprendedor
+        ]);
+
+        $pdo->commit();
+        header("Location: cliente.php?status=success");
+        exit();
+    } catch (PDOException $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
         }
-
-        header("Location: cliente.php?status=agregado");
-        exit();
-    } else {
-        header("Location: cliente.php?error=producto_invalido");
+        error_log("Error carrito.php: " . $e->getMessage());
+        header("Location: cliente.php?error=orden_fail");
         exit();
     }
-}
-
-// Cargar productos activos
-try {
-    $stmt = $pdo->query("SELECT id_producto, nombre, descripcion, precio, imagen, id_usuario FROM Producto WHERE activo = 1");
-    $products = $stmt->fetchAll();
-} catch (PDOException $e) {
-    $products = [];
-    error_log("Error cargando productos: " . $e->getMessage());
-}
-
-// Contador total del carrito
-$cart_count = 0;
-if (isset($_SESSION['cart'])) {
-    foreach ($_SESSION['cart'] as $item) {
-        $cart_count += (int) $item['cantidad'];
-    }
+} else {
+    header("Location: cliente.php");
+    exit();
 }
 ?>
 
