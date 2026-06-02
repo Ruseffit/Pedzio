@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'conexion.php';
+require_once 'conexion-4.php';
 
 if (!isset($_SESSION['cart'])) {
     $_SESSION['cart'] = [];
@@ -11,17 +11,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_producto'])) {
 
     if ($id_producto > 0) {
         if (!isset($_SESSION['cart'][$id_producto])) {
-            $_SESSION['cart'][$id_producto] = [
-                'cantidad' => 1
-            ];
+            $_SESSION['cart'][$id_producto] = ['cantidad' => 1];
         } else {
             $_SESSION['cart'][$id_producto]['cantidad']++;
         }
-
         header("Location: cliente.php?status=agregado");
-        exit();
-    } else {
-        header("Location: cliente.php?error=producto_invalido");
         exit();
     }
 }
@@ -35,10 +29,8 @@ try {
 }
 
 $cart_count = 0;
-if (isset($_SESSION['cart'])) {
-    foreach ($_SESSION['cart'] as $item) {
-        $cart_count += (int) ($item['cantidad'] ?? 0);
-    }
+foreach ($_SESSION['cart'] as $item) {
+    $cart_count += (int)($item['cantidad'] ?? 0);
 }
 ?>
 
