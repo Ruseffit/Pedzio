@@ -1,9 +1,11 @@
 <?php
-$host = 'sql306.infinityfree.com';
-$dbname = 'if042067399pedziodb';
-$user = 'if042067399';
-$password = 'TU_PASSWORD_REAL';
-$port = '3306';
+// conexion.php - Conexión Oficial y Mapeada para InfinityFree
+
+$host     = "sql306.infinityfree.com"; 
+$db_name  = "if0_42067399_pedzio_db";  // ← Este es el nombre exacto de tu lista
+$user     = "if0_42067399";            
+$password = "74fyMkbcdFbII";           
+$port     = 3306;
 
 try {
     $pdo = new PDO(
