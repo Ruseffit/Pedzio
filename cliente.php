@@ -4,8 +4,9 @@ session_start();
 require_once 'conexion.php';
 
 // Validar que el cliente esté logueado
+session_start();
 if (!isset($_SESSION['id_cliente'])) {
-    header("Location: login_cliente.php");
+    header("Location: index.php?error=acceso_denegado");
     exit();
 }
 
