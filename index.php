@@ -1,3 +1,55 @@
+<?php
+session_start();
+require_once 'conexion.php';
+
+$error = "";
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $correo = trim($_POST['correo'] ?? '');
+    $clave = trim($_POST['clave'] ?? '');
+
+    try {
+        // Intentar login como Usuario (Emprendedor o SuperAdmin)
+        $stmt = $pdo->prepare("SELECT * FROM Usuario WHERE correo = :correo AND activo = 1");
+        $stmt->execute([':correo' => $correo]);
+        $usuario = $stmt->fetch();
+
+        if ($usuario && password_verify($clave, $usuario['contrasena'])) {
+            $_SESSION['id_usuario'] = $usuario['id_usuario'];
+            $_SESSION['nombre'] = $usuario['nombre'];
+            $_SESSION['rol'] = $usuario['rol'];
+
+            if ($usuario['rol'] === 'SuperAdmin') {
+                header("Location: superadmin.php");
+                exit();
+            } else {
+                header("Location: emprendedor.php");
+                exit();
+            }
+        }
+
+        // Intentar login como Cliente
+        $stmt = $pdo->prepare("SELECT * FROM Cliente WHERE correo = :correo AND activo = 1");
+        $stmt->execute([':correo' => $correo]);
+        $cliente = $stmt->fetch();
+
+        if ($cliente && password_verify($clave, $cliente['contrasena'])) {
+            $_SESSION['id_cliente'] = $cliente['id_cliente'];
+            $_SESSION['nombre_cliente'] = $cliente['nombre'];
+
+            header("Location: cliente.php");
+            exit();
+        }
+
+        $error = "Correo o contraseña incorrectos.";
+
+    } catch (PDOException $e) {
+        $error = "Error de conexión o consulta.";
+        error_log("Error login index-2.php: " . $e->getMessage());
+    }
+}
+?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -27,7 +79,6 @@
   html { scroll-behavior: smooth; }
   body { font-family: 'Poppins', sans-serif; background: var(--gray-bg); color: var(--navy); overflow-x: hidden; }
 
-  /* ── NAVBAR ── */
   .navbar {
     position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
     background: var(--white);
@@ -63,7 +114,6 @@
   .hamburger { display: none; flex-direction: column; gap: 5px; cursor: pointer; }
   .hamburger span { display: block; width: 24px; height: 2px; background: var(--navy); border-radius: 2px; transition: 0.3s; }
 
-  /* ── HERO ── */
   .hero {
     min-height: 100vh; padding: 100px 5% 60px;
     background: var(--gray-bg);
@@ -131,7 +181,6 @@
   }
   .hero-img-placeholder .plate-icon { font-size: 100px; filter: drop-shadow(0 8px 24px rgba(0,0,0,0.4)); }
 
-  /* ── FEATURES ── */
   .features { padding: 80px 5%; background: var(--white); }
   .section-label { text-align: center; color: var(--orange); font-size: 0.75rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
   .section-title { text-align: center; font-size: clamp(1.6rem,3vw,2.4rem); font-weight: 800; color: var(--navy); margin-bottom: 48px; letter-spacing: -0.5px; }
@@ -145,7 +194,6 @@
   .feature-card h3 { font-size: 1rem; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
   .feature-card p { font-size: 0.875rem; color: var(--gray-text); line-height: 1.65; }
 
-  /* ── FOOTER ── */
   footer {
     background: var(--navy); color: rgba(255,255,255,0.6);
     text-align: center; padding: 28px 5%;
@@ -153,7 +201,6 @@
   }
   footer strong { color: var(--orange); }
 
-  /* ── RESPONSIVE ── */
   @media (max-width: 860px) {
     .navbar-links { display: none; position: absolute; top: 70px; left: 0; right: 0; background: var(--white); flex-direction: column; padding: 20px 5%; gap: 16px; box-shadow: var(--shadow-md); }
     .navbar-links.open { display: flex; }
@@ -167,7 +214,6 @@
 </head>
 <body>
 
-<!-- NAVBAR -->
 <nav class="navbar" style="display: flex; align-items: center; justify-content: space-between; padding: 15px 5%; background: var(--white); box-shadow: var(--shadow-sm); position: sticky; top: 0; z-index: 1000;">
   <a href="#" class="navbar-brand" style="display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--navy); font-weight: 700; font-size: 22px;">
     <div class="logo-placeholder" style="background: var(--orange); color: white; width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800;">P</div>
@@ -184,11 +230,11 @@
     <a href="cliente.php" class="btn-outline" style="text-decoration: none; color: var(--orange); border: 2px solid var(--orange); padding: 8px 14px; border-radius: 8px; font-weight: 600; font-size: 13px; transition: 0.3s;">
       🛒 Ver Catálogo
     </a>
-    
+
     <a href="emprendedor.php" class="btn-cta" style="text-decoration: none; background: var(--navy); color: white; padding: 10px 16px; border-radius: 8px; font-weight: 600; font-size: 13px; transition: 0.3s;">
       👨‍🍳 Panel MYPE
     </a>
-    
+
     <a href="superadmin.php" style="text-decoration: none; color: #9CA3AF; font-size: 12px; margin-left: 5px; font-weight: 500;" title="Consola Global">
       ⚙️ Admin
     </a>
@@ -201,8 +247,6 @@
   </div>
 </nav>
 
-<!-- HERO -->
- 
 <section class="hero">
   <div class="hero-inner">
     <div class="hero-left">
@@ -224,7 +268,6 @@
   </div>
 </section>
 
-<!-- FEATURES -->
 <section class="features" id="features">
   <p class="section-label">¿Qué hace Pedzio?</p>
   <h2 class="section-title">Todo lo que tu negocio necesita</h2>
@@ -253,7 +296,7 @@
 </section>
 
 <footer>
-  <p>© 2026 <strong>Pedzio</strong> — Hecho por Jennifer (Zarai)  · Con fines univeristarios </p>
+  <p>© 2026 <strong>Pedzio</strong> — Hecho por Jennifer (Zarai) · Con fines universitarios</p>
 </footer>
 
 </body>
