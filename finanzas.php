@@ -1,58 +1,43 @@
 <?php
+// finanzas.php - Gestión de Caja Chica para el Emprendedor MYPE
 session_start();
 require_once 'conexion.php';
 
-if (!isset($_SESSION['idusuario'])) {
-    header("Location: emprendedor.php");
-    exit();
-}
-
-$id_usuario = (int) $_SESSION['idusuario'];
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['monto'])) {
-    $monto = floatval($_POST['monto']);
-    $tipo = $_POST['tipo'] ?? '';
-    $categoria = htmlspecialchars($_POST['categoria'] ?? 'General');
+    $monto       = floatval($_POST['monto']);
+    $tipo        = $_POST['tipo'] ?? 'gasto';
+    $categoria   = htmlspecialchars($_POST['categoria'] ?? 'General');
     $descripcion = htmlspecialchars($_POST['descripcion'] ?? '');
-
-    if ($monto <= 0) {
-        header("Location: emprendedor.php?error=monto_invalido");
-        exit();
-    }
-
-    if (!in_array($tipo, ['ingreso', 'gasto'], true)) {
-        header("Location: emprendedor.php?error=tipo_invalido");
-        exit();
-    }
+    $id_usuario  = 1; // ID fijo de tu MYPE demo
 
     try {
         if ($tipo === 'gasto') {
-            $sql = "INSERT INTO Gasto (monto, categoria, descripcion, id_usuario, activo)
-                    VALUES (:monto, :cat, :descr, :uid, 1)";
+            // Guardamos directo en la tabla independiente de Gastos
+            $sql = "INSERT INTO Gasto (monto, categoria, descripcion, id_usuario)
+                    VALUES (:monto, :cat, :descr, :uid)";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
                 ':monto' => $monto,
-                ':cat' => $categoria,
+                ':cat'   => $categoria,
                 ':descr' => $descripcion,
-                ':uid' => $id_usuario
+                ':uid'   => $id_usuario
             ]);
         } else {
-            $sql = "INSERT INTO Ingreso (monto, descripcion, id_pedido, id_usuario, activo)
-                    VALUES (:monto, :descr, NULL, :uid, 1)";
+            // Guardamos directo en la tabla de Ingresos (con id_pedido NULL por ser manual)
+            $sql = "INSERT INTO Ingreso (monto, descripcion, id_pedido)
+                    VALUES (:monto, :descr, NULL)";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
                 ':monto' => $monto,
-                ':descr' => '[' . $categoria . '] ' . $descripcion,
-                ':uid' => $id_usuario
+                ':descr' => '[' . $categoria . '] ' . $descripcion
             ]);
         }
 
         header("Location: emprendedor.php?status=finanzas_ok");
         exit();
+
     } catch (PDOException $e) {
-        error_log("Error finanzas.php: " . $e->getMessage());
-        header("Location: emprendedor.php?error=registro_fail");
-        exit();
+        die("Error al registrar movimiento financiero: " . $e->getMessage());
     }
 } else {
     header("Location: emprendedor.php");
